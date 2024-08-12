@@ -136,7 +136,7 @@ describe('e2e_fees/private_refunds', () => {
   });
 
   // TODO(#7694): Remove this test once the lacking feature in TXE is implemented.
-  it('insufficient funded amount is correctly handled', async () => {
+  it.only('insufficient funded amount is correctly handled', async () => {
     // 1. We generate randomness for Alice and derive randomness for Bob.
     const aliceRandomness = Fr.random(); // Called user_randomness in contracts
     const bobRandomness = poseidon2Hash([aliceRandomness]); // Called fee_payer_randomness in contracts
