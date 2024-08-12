@@ -341,7 +341,7 @@ export class AztecNodeService implements AztecNode {
     const timer = new Timer();
     this.log.info(`Received tx ${tx.getTxHash()}`);
 
-    if ((await this.validateTx(tx)) === false) {
+    if (!(await this.isValidTx(tx))) {
       this.metrics.receivedTx(timer.ms(), false);
       return;
     }
@@ -768,7 +768,7 @@ export class AztecNodeService implements AztecNode {
     );
   }
 
-  public async validateTx(tx: Tx): Promise<boolean> {
+  public async isValidTx(tx: Tx): Promise<boolean> {
     const [_, invalidTxs] = await this.txValidator.validateTxs([tx]);
     if (invalidTxs.length > 0) {
       this.log.warn(`Rejecting tx ${tx.getTxHash()} because of validation errors`);
