@@ -15,7 +15,7 @@ contract TokenWithRefunds {
         prelude::{NoteGetterOptions, Map, PublicMutable, SharedImmutable, PrivateSet, AztecAddress},
         encrypted_logs::{
         encrypted_note_emission::{
-        encode_and_encrypt_note, encode_and_encrypt_note_with_keys,
+        encode_and_encrypt_note, encode_and_encrypt_note_with_keys, encode_and_encrypt_note_with_keys_2,
         encode_and_encrypt_note_with_keys_unconstrained
     },
         encrypted_event_emission::{encode_and_encrypt_event, encode_and_encrypt_event_with_keys_unconstrained}
@@ -449,14 +449,8 @@ contract TokenWithRefunds {
         user_randomness: Field, // A randomness to mix in with the generated refund note for the sponsored user.
         fee_payer_randomness: Field // A randomness to mix in with the generated fee note for the fee payer.
     ) {
-        // 1. This function is called by fee paying contract (fee_payer) when setting up a refund so we need to support
-        // the authwit flow here and check that the user really permitted fee_payer to set up a refund on their behalf.
-        assert_current_call_valid_authwit(&mut context, user);
-
         // 2. Get all the relevant keys
         let header = context.get_header();
-        let fee_payer_npk_m_hash = header.get_npk_m_hash(&mut context, fee_payer);
-        let user_npk_m_hash = header.get_npk_m_hash(&mut context, user);
         let user_ovpk = header.get_ovpk_m(&mut context, user);
         let user_ivpk = header.get_ivpk_m(&mut context, user);
 
@@ -472,7 +466,7 @@ contract TokenWithRefunds {
             [context.get_args_hash()]
         );
 
-        storage.balances.sub(user, U128::from_integer(funded_amount)).emit(encode_and_encrypt_note_with_keys(&mut context, user_ovpk, user_ivpk, user));
+        storage.balances.add(user, U128::from_integer(funded_amount)).emit(encode_and_encrypt_note_with_keys_2(&mut context, user_ovpk, user_ivpk, user));
 
         dep::aztec::oracle::debug_log::debug_log_format(
             "context.this_address() after: {0}",
@@ -483,44 +477,7 @@ contract TokenWithRefunds {
             [context.get_args_hash()]
         );
 
-        // 4. We create the partial notes for the fee payer and the user.
-        // --> Called "partial" because they don't have the amount set yet (that will be done in `complete_refund(...)`).
-        let fee_payer_partial_note = TokenNote {
-            header: NoteHeader {
-                contract_address: AztecAddress::zero(),
-                nonce: 0,
-                storage_slot: storage.balances.map.at(fee_payer).storage_slot,
-                note_hash_counter: 0
-            },
-            amount: U128::zero(),
-            npk_m_hash: fee_payer_npk_m_hash,
-            randomness: fee_payer_randomness
-        };
-        let user_partial_note = TokenNote {
-            header: NoteHeader {
-                contract_address: AztecAddress::zero(),
-                nonce: 0,
-                storage_slot: storage.balances.map.at(user).storage_slot,
-                note_hash_counter: 0
-            },
-            amount: U128::zero(),
-            npk_m_hash: user_npk_m_hash,
-            randomness: user_randomness
-        };
-
-        // 5. Now we get the note hiding points.
-        let mut fee_payer_point = fee_payer_partial_note.to_note_hiding_point();
-        let mut user_point = user_partial_note.to_note_hiding_point();
-
-        // 6. Set the public teardown function to `complete_refund(...)`. Public teardown is the only time when a public
-        // function has access to the final transaction fee, which is needed to compute the actual refund amount.
-        context.set_public_teardown_function(
-            context.this_address(),
-            FunctionSelector::from_signature("complete_refund(((Field,Field,bool)),((Field,Field,bool)),Field)"),
-            [
-            fee_payer_point.inner.x, fee_payer_point.inner.y, fee_payer_point.inner.is_infinite as Field, user_point.inner.x, user_point.inner.y, user_point.inner.is_infinite as Field, funded_amount
-        ]
-        );
+        assert(context.this_address().to_field() != 0, "this_address is zero");
     }
 
     // TODO(#7728): even though the funded_amount should be a U128, we can't have that type in a contract interface due
