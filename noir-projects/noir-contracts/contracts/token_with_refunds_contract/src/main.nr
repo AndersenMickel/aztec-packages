@@ -466,7 +466,7 @@ contract TokenWithRefunds {
             [context.get_args_hash()]
         );
 
-        storage.balances.add(user, U128::from_integer(funded_amount)).emit(encode_and_encrypt_note_with_keys_2(&mut context, user_ovpk, user_ivpk, user));
+        storage.balances.add(user, U128::from_integer(funded_amount)).emit(encode_and_encrypt_note_with_keys_2(&mut context, Point::empty()));
 
         dep::aztec::oracle::debug_log::debug_log_format(
             "context.this_address() after: {0}",
