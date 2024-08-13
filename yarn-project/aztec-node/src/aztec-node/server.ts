@@ -61,11 +61,12 @@ import { getCanonicalMultiCallEntrypointAddress } from '@aztec/protocol-contract
 import {
   AggregateTxValidator,
   DataTxValidator,
+  DoubleSpendTxValidator,
   type GlobalVariableBuilder,
   SequencerClient,
   getGlobalVariableBuilder,
 } from '@aztec/sequencer-client';
-import { PublicProcessorFactory, WASMSimulator, createSimulationProvider } from '@aztec/simulator';
+import { PublicProcessorFactory, WASMSimulator, WorldStateDB, createSimulationProvider } from '@aztec/simulator';
 import { type TelemetryClient } from '@aztec/telemetry-client';
 import { NoopTelemetryClient } from '@aztec/telemetry-client/noop';
 import {
@@ -162,6 +163,7 @@ export class AztecNodeService implements AztecNode {
       new DataTxValidator(),
       new MetadataTxValidator(config.l1ChainId),
       new TxProofValidator(proofVerifier),
+      new DoubleSpendTxValidator(new WorldStateDB(worldStateSynchronizer.getLatest())),
     );
 
     const simulationProvider = await createSimulationProvider(config, log);
