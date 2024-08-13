@@ -116,10 +116,6 @@ pub fn encode_and_encrypt_note_with_keys_unconstrained<Note, let N: u32, let NB:
 
 // =============================================================================================================
 
-use dep::protocol_types::{constants::GENERATOR_INDEX__SYMMETRIC_KEY, scalar::Scalar, utils::arr_copy_slice};
-use crate::utils::point::point_to_bytes;
-use std::{hash::sha256, embedded_curve_ops::multi_scalar_mul};
-
 // when context was second in the closure env it has not failed (Point, &mut PrivateContext)
 pub fn encode_and_encrypt_note_with_keys_2<Note, let N: u32, let NB: u32, let M: u32>(
     context: &mut PrivateContext,

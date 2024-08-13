@@ -449,11 +449,6 @@ contract TokenWithRefunds {
         user_randomness: Field, // A randomness to mix in with the generated refund note for the sponsored user.
         fee_payer_randomness: Field // A randomness to mix in with the generated fee note for the fee payer.
     ) {
-        // 2. Get all the relevant keys
-        let header = context.get_header();
-        let user_ovpk = header.get_ovpk_m(&mut context, user);
-        let user_ivpk = header.get_ivpk_m(&mut context, user);
-
         // 3. Deduct the funded amount from the user's balance - this is a maximum fee a user is willing to pay
         // (called fee limit in aztec spec). The difference between fee limit and the actual tx fee will be refunded 
         // to the user in the `complete_refund(...)` function.
