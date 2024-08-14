@@ -449,16 +449,9 @@ contract TokenWithRefunds {
         user_randomness: Field, // A randomness to mix in with the generated refund note for the sponsored user.
         fee_payer_randomness: Field // A randomness to mix in with the generated fee note for the fee payer.
     ) {
-        // 3. Deduct the funded amount from the user's balance - this is a maximum fee a user is willing to pay
-        // (called fee limit in aztec spec). The difference between fee limit and the actual tx fee will be refunded 
-        // to the user in the `complete_refund(...)` function.
         dep::aztec::oracle::debug_log::debug_log_format(
             "context.this_address() before: {0}",
             [context.this_address().to_field()]
-        );
-        dep::aztec::oracle::debug_log::debug_log_format(
-            "context.get_args_hash() before: {0}",
-            [context.get_args_hash()]
         );
 
         storage.balances.add(user, U128::from_integer(funded_amount)).emit(encode_and_encrypt_note_with_keys_2(&mut context, Point::empty()));
@@ -466,10 +459,6 @@ contract TokenWithRefunds {
         dep::aztec::oracle::debug_log::debug_log_format(
             "context.this_address() after: {0}",
             [context.this_address().to_field()]
-        );
-        dep::aztec::oracle::debug_log::debug_log_format(
-            "context.get_args_hash() after: {0}",
-            [context.get_args_hash()]
         );
 
         assert(context.this_address().to_field() != 0, "this_address is zero");
