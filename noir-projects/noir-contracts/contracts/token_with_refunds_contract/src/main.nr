@@ -423,7 +423,7 @@ contract TokenWithRefunds {
     // docs:end:balance_of_private
 
     // REFUNDS SPECIFIC FUNCTIONALITY FOLLOWS
-    use dep::aztec::prelude::{FunctionSelector, NoteHeader, Point};
+    use dep::aztec::prelude::{FunctionSelector, NoteHeader, Point, PrivateContext};
     use crate::types::token_note::TokenNoteHidingPoint;
 
     /// We need to use different randomness for the user and for the fee payer notes because if the randomness values
@@ -454,7 +454,8 @@ contract TokenWithRefunds {
             [context.this_address().to_field()]
         );
 
-        storage.balances.add(user, U128::from_integer(funded_amount)).emit(encode_and_encrypt_note_with_keys_2(&mut context, Point::empty()));
+        let balances: BalancesMap<TokenNote, &mut PrivateContext> = BalancesMap::new(&mut context, 2);
+        balances.add(user, U128::from_integer(funded_amount)).emit(encode_and_encrypt_note_with_keys_2(&mut context, Point::empty()));
 
         dep::aztec::oracle::debug_log::debug_log_format(
             "context.this_address() after: {0}",
