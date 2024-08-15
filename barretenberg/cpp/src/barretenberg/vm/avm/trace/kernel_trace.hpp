@@ -2,6 +2,7 @@
 
 #include "barretenberg/numeric/uint128/uint128.hpp"
 #include "barretenberg/vm/avm/trace/common.hpp"
+#include "barretenberg/vm/avm/trace/execution_hints.hpp"
 
 #include "barretenberg/vm/constants.hpp"
 
@@ -13,7 +14,21 @@ namespace bb::avm_trace {
 
 class AvmKernelTraceBuilder {
   public:
+    enum class KernelTraceOpType {
+        SLOAD,
+        SSTORE,
+        NOTE_HASH_EXISTS,
+        EMIT_NOTE_HASH,
+        NULLIFIER_EXISTS,
+        EMIT_NULLIFIER,
+        L1_TO_L2_MSG_EXISTS,
+        EMIT_UNENCRYPTED_LOG,
+        EMIT_L2_TO_L1_MSG
+    };
+
     struct KernelTraceEntry {
+        uint32_t initial_side_effect_counter = 0;
+
         // Clk - to join black onto the main trace
         uint32_t clk = 0;
         uint32_t kernel_in_offset = 0;
@@ -22,18 +37,8 @@ class AvmKernelTraceBuilder {
         bool q_kernel_output_lookup = false;
 
         // In finalise, the main trace writes the correct write_offset for each operation based appearing selectors
-        bool op_note_hash_exists = false;
-        bool op_emit_note_hash = false;
-        bool op_nullifier_exists = false;
-        bool op_emit_nullifier = false;
-        bool op_l1_to_l2_msg_exists = false;
-        bool op_emit_unencrypted_log = false;
-        bool op_emit_l2_to_l1_msg = false;
-        bool op_sload = false;
-        bool op_sstore = false;
+        KernelTraceOpType operation;
     };
-
-    VmPublicInputs public_inputs;
 
     // Counts the number of accesses into each SELECTOR for the environment selector lookups;
     std::unordered_map<uint32_t, uint32_t> kernel_input_selector_counter;
@@ -42,11 +47,15 @@ class AvmKernelTraceBuilder {
     // optimise this to just hardcode the counter to be the same as the lookup selector value!!!
     std::unordered_map<uint32_t, uint32_t> kernel_output_selector_counter;
 
-    // Constructor receives copy of kernel_inputs from the main trace builder
-    AvmKernelTraceBuilder(VmPublicInputs public_inputs);
+    AvmKernelTraceBuilder(uint32_t initial_side_effect_counter, VmPublicInputs public_inputs, ExecutionHints hints)
+        : initial_side_effect_counter(initial_side_effect_counter)
+        , public_inputs(std::move(public_inputs))
+        , hints(std::move(hints))
+    {}
 
     void reset();
-    std::vector<KernelTraceEntry> finalize();
+    void finalize(std::vector<AvmFullRow<FF>>& main_trace);
+    void finalize_columns(std::vector<AvmFullRow<FF>>& main_trace) const;
 
     // Context
     FF op_address();
@@ -79,6 +88,10 @@ class AvmKernelTraceBuilder {
 
   private:
     std::vector<KernelTraceEntry> kernel_trace;
+
+    uint32_t initial_side_effect_counter;
+    VmPublicInputs public_inputs;
+    ExecutionHints hints;
 
     // Output index counters
     uint32_t note_hash_exists_offset = 0;

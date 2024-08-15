@@ -286,23 +286,19 @@ void AvmTraceBuilder::finalise_mem_trace_lookup_counts()
  *        underlying traces and initialize gas values.
  */
 AvmTraceBuilder::AvmTraceBuilder(VmPublicInputs public_inputs,
-                                 ExecutionHints execution_hints,
+                                 ExecutionHints execution_hints_,
                                  uint32_t side_effect_counter,
                                  std::vector<FF> calldata)
     // NOTE: we initialise the environment builder here as it requires public inputs
-    : kernel_trace_builder(std::move(public_inputs))
-    , calldata(std::move(calldata))
+    : calldata(std::move(calldata))
     , side_effect_counter(side_effect_counter)
-    , initial_side_effect_counter(side_effect_counter)
-    , execution_hints(std::move(execution_hints))
+    , execution_hints(std::move(execution_hints_))
+    , kernel_trace_builder(side_effect_counter, public_inputs, execution_hints)
 {
-    main_trace.reserve(AVM_TRACE_SIZE);
-
     // TODO: think about cast
-    gas_trace_builder.set_initial_gas(static_cast<uint32_t>(std::get<KERNEL_INPUTS>(
-                                          kernel_trace_builder.public_inputs)[L2_GAS_LEFT_CONTEXT_INPUTS_OFFSET]),
-                                      static_cast<uint32_t>(std::get<KERNEL_INPUTS>(
-                                          kernel_trace_builder.public_inputs)[DA_GAS_LEFT_CONTEXT_INPUTS_OFFSET]));
+    gas_trace_builder.set_initial_gas(
+        static_cast<uint32_t>(std::get<KERNEL_INPUTS>(public_inputs)[L2_GAS_LEFT_CONTEXT_INPUTS_OFFSET]),
+        static_cast<uint32_t>(std::get<KERNEL_INPUTS>(public_inputs)[DA_GAS_LEFT_CONTEXT_INPUTS_OFFSET]));
 }
 
 /**************************************************************************************************
@@ -3833,6 +3829,12 @@ std::vector<Row> AvmTraceBuilder::finalize(bool range_check_required)
     const auto& rem_gas_rng_check_counts = gas_trace_builder.rem_gas_rng_check_counts;
 
     /**********************************************************************************************
+     * KERNEL TRACE INCLUSION
+     **********************************************************************************************/
+
+    kernel_trace_builder.finalize(main_trace);
+
+    /**********************************************************************************************
      * ONLY FIXED TABLES FROM HERE ON
      **********************************************************************************************/
 
@@ -3951,186 +3953,11 @@ std::vector<Row> AvmTraceBuilder::finalize(bool range_check_required)
     }
 
     /**********************************************************************************************
-     * KERNEL TRACE INCLUSION
+     * OTHER STUFF
      **********************************************************************************************/
 
-    // Write the kernel trace into the main trace
-    // 1. The write offsets are constrained to be non changing over the entire trace, so we fill in the values
-    // until we
-    //    hit an operation that changes one of the write_offsets (a relevant opcode)
-    // 2. Upon hitting the clk of each kernel operation we copy the values into the main trace
-    // 3. When an increment is required, we increment the value in the next row, then continue the process until
-    // the end
-    // 4. Whenever we hit the last row, we zero all write_offsets such that the shift relation will succeed
-    std::vector<AvmKernelTraceBuilder::KernelTraceEntry> kernel_trace = kernel_trace_builder.finalize();
-    size_t kernel_padding_main_trace_bottom = 1;
-
-    // Index 1 corresponds here to the first active row of the main execution trace, as
-    // we already prepended the extra row for shifted columns. Therefore, initialization
-    // of side_effect_counter occurs occurs on this row.
-    main_trace.at(1).kernel_side_effect_counter = initial_side_effect_counter;
-    // This index is required to retrieve the right side effect counter after an external call.
-    size_t external_call_cnt = 0;
-
-    // External loop iterates over the kernel entries which are sorted by increasing clk.
-    // Internal loop iterates to fill the gap in main trace between each kernel entries.
-    for (auto const& src : kernel_trace) {
-        // Check the clock and iterate through the main trace until we hit the clock
-        auto clk = src.clk;
-
-        // Until the next kernel changing instruction is encountered we set all of the values of the offset
-        // arrays to be the same as the previous row This satisfies the `offset' - (offset + operation_selector)
-        // = 0` constraints
-        for (size_t j = kernel_padding_main_trace_bottom; j < clk; j++) {
-            auto const& prev = main_trace.at(j);
-            auto& dest = main_trace.at(j + 1);
-
-            dest.kernel_note_hash_exist_write_offset = prev.kernel_note_hash_exist_write_offset;
-            dest.kernel_emit_note_hash_write_offset = prev.kernel_emit_note_hash_write_offset;
-            dest.kernel_nullifier_exists_write_offset = prev.kernel_nullifier_exists_write_offset;
-            dest.kernel_nullifier_non_exists_write_offset = prev.kernel_nullifier_non_exists_write_offset;
-            dest.kernel_emit_nullifier_write_offset = prev.kernel_emit_nullifier_write_offset;
-            dest.kernel_emit_l2_to_l1_msg_write_offset = prev.kernel_emit_l2_to_l1_msg_write_offset;
-            dest.kernel_emit_unencrypted_log_write_offset = prev.kernel_emit_unencrypted_log_write_offset;
-            dest.kernel_l1_to_l2_msg_exists_write_offset = prev.kernel_l1_to_l2_msg_exists_write_offset;
-            dest.kernel_sload_write_offset = prev.kernel_sload_write_offset;
-            dest.kernel_sstore_write_offset = prev.kernel_sstore_write_offset;
-
-            // Adjust side effect counter after an external call
-            if (prev.main_sel_op_external_call == 1) {
-                dest.kernel_side_effect_counter =
-                    execution_hints.externalcall_hints.at(external_call_cnt).end_side_effect_counter;
-                external_call_cnt++;
-            } else {
-                dest.kernel_side_effect_counter = prev.kernel_side_effect_counter;
-            }
-        }
-
-        Row& curr = main_trace.at(clk);
-
-        // Read in values from kernel trace
-        // Lookup values
-        curr.kernel_kernel_in_offset = src.kernel_in_offset;
-        curr.kernel_kernel_out_offset = src.kernel_out_offset;
-        curr.main_sel_q_kernel_lookup = static_cast<uint32_t>(src.q_kernel_lookup);
-        curr.main_sel_q_kernel_output_lookup = static_cast<uint32_t>(src.q_kernel_output_lookup);
-
-        // Operation selectors
-        curr.main_sel_op_note_hash_exists = static_cast<uint32_t>(src.op_note_hash_exists);
-        curr.main_sel_op_emit_note_hash = static_cast<uint32_t>(src.op_emit_note_hash);
-        curr.main_sel_op_nullifier_exists = static_cast<uint32_t>(src.op_nullifier_exists);
-        curr.main_sel_op_emit_nullifier = static_cast<uint32_t>(src.op_emit_nullifier);
-        curr.main_sel_op_l1_to_l2_msg_exists = static_cast<uint32_t>(src.op_l1_to_l2_msg_exists);
-        curr.main_sel_op_emit_unencrypted_log = static_cast<uint32_t>(src.op_emit_unencrypted_log);
-        curr.main_sel_op_emit_l2_to_l1_msg = static_cast<uint32_t>(src.op_emit_l2_to_l1_msg);
-        curr.main_sel_op_sload = static_cast<uint32_t>(src.op_sload);
-        curr.main_sel_op_sstore = static_cast<uint32_t>(src.op_sstore);
-
-        if (clk < old_trace_size) {
-            Row& next = main_trace.at(clk + 1);
-
-            // Increment the write offset counter for the following row
-            next.kernel_note_hash_exist_write_offset =
-                curr.kernel_note_hash_exist_write_offset + static_cast<FF>(src.op_note_hash_exists);
-            next.kernel_emit_note_hash_write_offset =
-                curr.kernel_emit_note_hash_write_offset + static_cast<FF>(src.op_emit_note_hash);
-            next.kernel_emit_nullifier_write_offset =
-                curr.kernel_emit_nullifier_write_offset + static_cast<FF>(src.op_emit_nullifier);
-            next.kernel_nullifier_exists_write_offset =
-                curr.kernel_nullifier_exists_write_offset + (static_cast<FF>(src.op_nullifier_exists) * curr.main_ib);
-            next.kernel_nullifier_non_exists_write_offset =
-                curr.kernel_nullifier_non_exists_write_offset +
-                (static_cast<FF>(src.op_nullifier_exists) * (FF(1) - curr.main_ib));
-            next.kernel_l1_to_l2_msg_exists_write_offset =
-                curr.kernel_l1_to_l2_msg_exists_write_offset + static_cast<FF>(src.op_l1_to_l2_msg_exists);
-            next.kernel_emit_l2_to_l1_msg_write_offset =
-                curr.kernel_emit_l2_to_l1_msg_write_offset + static_cast<FF>(src.op_emit_l2_to_l1_msg);
-            next.kernel_emit_unencrypted_log_write_offset =
-                curr.kernel_emit_unencrypted_log_write_offset + static_cast<FF>(src.op_emit_unencrypted_log);
-            next.kernel_sload_write_offset = curr.kernel_sload_write_offset + static_cast<FF>(src.op_sload);
-            next.kernel_sstore_write_offset = curr.kernel_sstore_write_offset + static_cast<FF>(src.op_sstore);
-
-            // The side effect counter will increment regardless of the offset value
-            next.kernel_side_effect_counter = curr.kernel_side_effect_counter + 1;
-        }
-
-        kernel_padding_main_trace_bottom = clk + 1;
-    }
-
-    // Pad out the main trace from the bottom of the main trace until the end
-    for (size_t i = kernel_padding_main_trace_bottom + 1; i < old_trace_size; ++i) {
-
-        Row const& prev = main_trace.at(i - 1);
-        Row& dest = main_trace.at(i);
-
-        // Setting all of the counters to 0 after the IS_LAST check so we can satisfy the constraints until the
-        // end
-        if (i == old_trace_size) {
-            dest.kernel_note_hash_exist_write_offset = 0;
-            dest.kernel_emit_note_hash_write_offset = 0;
-            dest.kernel_nullifier_exists_write_offset = 0;
-            dest.kernel_nullifier_non_exists_write_offset = 0;
-            dest.kernel_emit_nullifier_write_offset = 0;
-            dest.kernel_l1_to_l2_msg_exists_write_offset = 0;
-            dest.kernel_emit_unencrypted_log_write_offset = 0;
-            dest.kernel_emit_l2_to_l1_msg_write_offset = 0;
-            dest.kernel_sload_write_offset = 0;
-            dest.kernel_sstore_write_offset = 0;
-            dest.kernel_side_effect_counter = 0;
-        } else {
-            dest.kernel_note_hash_exist_write_offset = prev.kernel_note_hash_exist_write_offset;
-            dest.kernel_emit_note_hash_write_offset = prev.kernel_emit_note_hash_write_offset;
-            dest.kernel_nullifier_exists_write_offset = prev.kernel_nullifier_exists_write_offset;
-            dest.kernel_nullifier_non_exists_write_offset = prev.kernel_nullifier_non_exists_write_offset;
-            dest.kernel_emit_nullifier_write_offset = prev.kernel_emit_nullifier_write_offset;
-            dest.kernel_l1_to_l2_msg_exists_write_offset = prev.kernel_l1_to_l2_msg_exists_write_offset;
-            dest.kernel_emit_unencrypted_log_write_offset = prev.kernel_emit_unencrypted_log_write_offset;
-            dest.kernel_emit_l2_to_l1_msg_write_offset = prev.kernel_emit_l2_to_l1_msg_write_offset;
-            dest.kernel_sload_write_offset = prev.kernel_sload_write_offset;
-            dest.kernel_sstore_write_offset = prev.kernel_sstore_write_offset;
-            dest.kernel_side_effect_counter = prev.kernel_side_effect_counter;
-        }
-    }
-
-    // Public Input Columns Inclusion
-    // Crucial to add these columns after the extra row was added.
-
-    // Write lookup counts for inputs
-    for (uint32_t i = 0; i < KERNEL_INPUTS_LENGTH; i++) {
-        auto value = kernel_trace_builder.kernel_input_selector_counter.find(i);
-        if (value != kernel_trace_builder.kernel_input_selector_counter.end()) {
-            auto& dest = main_trace.at(i);
-            dest.lookup_into_kernel_counts = FF(value->second);
-            dest.kernel_q_public_input_kernel_add_to_table = FF(1);
-        }
-    }
-
-    // Copy the kernel input public inputs
-    for (size_t i = 0; i < KERNEL_INPUTS_LENGTH; i++) {
-        main_trace.at(i).kernel_kernel_inputs = std::get<KERNEL_INPUTS>(kernel_trace_builder.public_inputs).at(i);
-    }
-
-    // Write lookup counts for outputs
-    for (uint32_t i = 0; i < KERNEL_OUTPUTS_LENGTH; i++) {
-        auto value = kernel_trace_builder.kernel_output_selector_counter.find(i);
-        if (value != kernel_trace_builder.kernel_output_selector_counter.end()) {
-            auto& dest = main_trace.at(i);
-            dest.kernel_output_lookup_counts = FF(value->second);
-            dest.kernel_q_public_input_kernel_out_add_to_table = FF(1);
-        }
-    }
-
-    // Copy the kernel outputs counts into the main trace
-    for (size_t i = 0; i < KERNEL_OUTPUTS_LENGTH; i++) {
-        main_trace.at(i).kernel_kernel_value_out =
-            std::get<KERNEL_OUTPUTS_VALUE>(kernel_trace_builder.public_inputs).at(i);
-
-        main_trace.at(i).kernel_kernel_side_effect_out =
-            std::get<KERNEL_OUTPUTS_SIDE_EFFECT_COUNTER>(kernel_trace_builder.public_inputs).at(i);
-
-        main_trace.at(i).kernel_kernel_metadata_out =
-            std::get<KERNEL_OUTPUTS_METADATA>(kernel_trace_builder.public_inputs).at(i);
-    }
+    // Add the kernel inputs and outputs
+    kernel_trace_builder.finalize_columns(main_trace);
 
     // calldata column inclusion and selector
     for (size_t i = 0; i < calldata.size(); i++) {
