@@ -41,7 +41,7 @@ import { AvailabilityOracleAbi, InboxAbi, OutboxAbi, RollupAbi } from '@aztec/l1
 import { SHA256Trunc, StandardTree } from '@aztec/merkle-tree';
 import { getVKTreeRoot } from '@aztec/noir-protocol-circuits-types';
 import { TxProver } from '@aztec/prover-client';
-import { type L1Publisher, getL1Publisher } from '@aztec/sequencer-client';
+import { L1Publisher } from '@aztec/sequencer-client';
 import { NoopTelemetryClient } from '@aztec/telemetry-client/noop';
 import { MerkleTrees, ServerWorldStateSynchronizer, type WorldStateConfig } from '@aztec/world-state';
 
@@ -169,7 +169,7 @@ describe('L1Publisher integration', () => {
     builder = await TxProver.new(config, new NoopTelemetryClient());
     prover = builder.createBlockProver(builderDb.asLatest());
 
-    publisher = getL1Publisher(
+    publisher = new L1Publisher(
       {
         l1RpcUrl: config.l1RpcUrl,
         requiredConfirmations: 1,
