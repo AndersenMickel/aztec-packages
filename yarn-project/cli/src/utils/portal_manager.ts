@@ -87,6 +87,17 @@ abstract class PortalManager {
 }
 
 export class FeeJuicePortalManager extends PortalManager {
+  public getPortalContract(): GetContractReturnType<
+    typeof FeeJuicePortalAbi,
+    WalletClient<HttpTransport, Chain, Account>
+  > {
+    return getContract({
+      address: this.tokenPortalAddress.toString(),
+      abi: FeeJuicePortalAbi,
+      client: this.walletClient,
+    });
+  }
+
   async bridgeTokens(to: AztecAddress, amount: bigint, secretHash: Fr): Promise<Hex> {
     const portal = getContract({
       address: this.tokenPortalAddress.toString(),
@@ -113,7 +124,7 @@ export class FeeJuicePortalManager extends PortalManager {
     publicClient: PublicClient<HttpTransport, Chain>,
     walletClient: WalletClient<HttpTransport, Chain, Account>,
     logger: DebugLogger,
-  ): Promise<PortalManager> {
+  ): Promise<FeeJuicePortalManager> {
     const {
       l1ContractAddresses: { feeJuiceAddress, feeJuicePortalAddress },
     } = await pxe.getNodeInfo();
