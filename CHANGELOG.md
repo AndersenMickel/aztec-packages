@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.50.0](https://github.com/AztecProtocol/aztec-packages/compare/aztec-packages-v0.49.2...aztec-packages-v0.50.0) (2024-08-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* replace public key fetching API ([#7996](https://github.com/AztecProtocol/aztec-packages/issues/7996))
+
+### Features
+
+* Replace public key fetching API ([#7996](https://github.com/AztecProtocol/aztec-packages/issues/7996)) ([73d6aa9](https://github.com/AztecProtocol/aztec-packages/commit/73d6aa98c7d156d3a007bd65e49575b1701f0f7e))
+* Unify all acir recursion constraints based on RecursionConstraint and proof_type ([#7993](https://github.com/AztecProtocol/aztec-packages/issues/7993)) ([7cb39bc](https://github.com/AztecProtocol/aztec-packages/commit/7cb39bceddcb9ec4142b86087a7af58d547ddfaa))
+
+
+### Miscellaneous
+
+* CLI command to set latest block as proven ([#7987](https://github.com/AztecProtocol/aztec-packages/issues/7987)) ([80eaf1d](https://github.com/AztecProtocol/aztec-packages/commit/80eaf1d482184019efd67b9a8be5d9c8729545fb))
+* Pedersen hash related cleanup in aztec.nr ([#8009](https://github.com/AztecProtocol/aztec-packages/issues/8009)) ([3c4ac65](https://github.com/AztecProtocol/aztec-packages/commit/3c4ac65766c651e56fb7823c3d799e462bbb4d91))
+* Replace relative paths to noir-protocol-circuits ([0d05d6b](https://github.com/AztecProtocol/aztec-packages/commit/0d05d6b75772cb37a3e62e9ca6936aabda346393))
+
 ## [0.49.2](https://github.com/AztecProtocol/aztec-packages/compare/aztec-packages-v0.49.1...aztec-packages-v0.49.2) (2024-08-15)
 
 
